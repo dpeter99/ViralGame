@@ -37,7 +37,7 @@ typedef unsigned int GL_OBJECT;
 
 typedef vec4 Quaternion;
 
-#define TESSELATION_LEVEL 20
+#define TESSELATION_LEVEL 40
 
 #pragma region Math
 
@@ -69,32 +69,18 @@ typedef Dnum<vec2> Dnum2;
 
 vec3 vec4_3(vec4 a) { return vec3(a.x, a.y, a.z); };
 
-#pragma endregion
-
-class Material;
-class Light;
-
-class Shader;
-class Light;
-class Scene;
-
-class LightData;
-
-
-struct RenderState
+bool operator==(const vec3& a, const vec3& b)
 {
-	mat4 MVP;
-	mat4 M;
-	mat4 Minv;
-	mat4 V;
-	mat4 P;
+	return a.x == b.x && a.y == b.y && a.z == b.z;
+}
 
-	Material* material;
-	std::vector<LightData> lights;
-	Texture* texture;
-	vec3 camPos;
-};
+bool operator!=(const vec3& a, const vec3& b)
+{
+	return !(a == b);
+}
 
+inline vec3 normalize_fix(const vec3& v) { return (v != vec3(0, 0, 0)) ? v * (1 / length(v)) : vec3(0, 0, 0); }
+#pragma endregion
 
 
 #pragma region BaseObject
@@ -152,6 +138,33 @@ private:
 #pragma endregion
 
 
+
+class Material;
+class Light;
+
+class Shader;
+class Light;
+class Scene;
+
+class LightData;
+
+
+struct RenderState
+{
+	mat4 MVP;
+	mat4 M;
+	mat4 Minv;
+	mat4 V;
+	mat4 P;
+
+	Material* material;
+	std::vector<LightData> lights;
+	Texture* texture;
+	vec3 camPos;
+};
+
+
+
 class Material
 {
 public:
@@ -162,7 +175,7 @@ public:
 	float shiny;
 
 	Texture* text;
-	
+
 	Shader* shader;
 
 	void Bind(RenderState& state);
@@ -172,13 +185,14 @@ public:
 class Shader : public GPUProgram
 {
 public:
-	Shader(){};
-	~Shader(){};
-	
+	Shader() {};
+	~Shader() {};
+
 	virtual void Bind(const RenderState& data) = 0;
 
 	void setUniformMaterial(const Material& material, const std::string& name)
 	{
+		printf("Binding Material data\n");
 		setUniform(material.kd, name + ".kd");
 		setUniform(material.ks, name + ".ks");
 		setUniform(material.ka, name + ".ka");
@@ -280,6 +294,8 @@ public:
 	PhongShader() { create(vertexSource, fragmentSource, "fragmentColor"); }
 
 	void Bind(const RenderState& state) {
+		printf("Binding Phong shader\n");
+
 		Use(); 		// make this program run
 		setUniform(state.MVP, "MVP");
 		setUniform(state.M, "M");
@@ -302,6 +318,8 @@ class CheckerBoardTexture : public Texture
 {
 public:
 	CheckerBoardTexture(const int width = 0, const int height = 0) : Texture() {
+		printf("Created Checker Board Texture\n");
+
 		std::vector<vec4> image(width * height);
 		const vec4 yellow(1, 1, 0, 1), blue(0, 0, 1, 1);
 		for (int x = 0; x < width; x++) for (int y = 0; y < height; y++) {
@@ -322,6 +340,8 @@ protected:
 public:
 	Geometry()
 	{
+		printf("Construct Geometry\n");
+
 		glGenVertexArrays(1, &vertex_array);
 		glBindVertexArray(vertex_array);
 		glGenBuffers(1, &vertex_buffer);
@@ -330,9 +350,13 @@ public:
 
 	~Geometry()
 	{
+		printf("Destruct Geometry\n");
+
 		glDeleteBuffers(1, &vertex_buffer);
 		glDeleteVertexArrays(1, &vertex_array);
 	}
+
+	virtual void Tick(float deltaTime) {};
 
 	virtual void Draw() = 0;
 };
@@ -349,7 +373,7 @@ class ParamSurface : public Geometry
 	int stripCount;
 
 public:
-	
+
 	ParamSurface() : vertexPerStrip(0), stripCount(0)
 	{
 
@@ -359,6 +383,7 @@ public:
 
 	VertexData GetVertexData(float u, float v)
 	{
+
 		VertexData res;
 		res.textcoord = vec2(u, v);
 		Dnum2 X, Y, Z;
@@ -379,6 +404,8 @@ public:
 
 	void create(int N = TESSELATION_LEVEL, int M = TESSELATION_LEVEL)
 	{
+		printf("Creating the Geometry (Param)\n");
+
 		vertexPerStrip = (M + 1) * 2;
 		stripCount = N;
 		std::vector<VertexData> vertexData;
@@ -398,13 +425,15 @@ public:
 		glEnableVertexAttribArray(2);
 
 		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(VertexData), (void*)offsetof(VertexData, pos));
-		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(VertexData), (void*)offsetof(VertexData, normal));
-		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(VertexData), (void*)offsetof(VertexData, textcoord));
+		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(VertexData), (void*)offsetof(VertexData, normal));
+		glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(VertexData), (void*)offsetof(VertexData, textcoord));
 
 	}
 
 	void Draw()
 	{
+		printf("Draw the Geometry (Param)\n");
+
 		glBindVertexArray(vertex_array);
 		for (unsigned int i = 0; i < stripCount; i++)
 		{
@@ -432,6 +461,39 @@ public:
 		Z = cos(V);
 	}
 };
+
+class AnimatedSurface : public ParamSurface
+{
+protected:
+	float t = 0;
+
+public:
+	void Tick(float deltaTime)
+	{
+		t += deltaTime;
+		create();
+	}
+};
+
+class WavySphere : public AnimatedSurface
+{
+public:
+	WavySphere()
+	{
+		create();
+	}
+
+	void eval(Dnum2& U, Dnum2& V, Dnum2& X, Dnum2& Y, Dnum2& Z)
+	{
+		U = U * 2.0f * (float)M_PI;
+		V = V * (float)M_PI;
+		float anim = t / 20;
+		X = (cos(U) * sin(V)) + (cos(V * 5 + anim) / 4*M_PI);
+		Y = (sin(U) * sin(V)) + (sin(V * 5 + anim) / 4*M_PI);
+		Z = cos(V) ;
+	}
+};
+
 
 class Tractricoid : public ParamSurface
 {
@@ -461,14 +523,16 @@ class Entity : public SHObject
 {
 	SHObject_Base(Entity)
 protected:
-	vec3 pos;
-	vec3 scale;
-	Quaternion rotation;
+	vec3 pos = vec3(0, 0, 0);
+	vec3 scale = vec3(1, 1, 1);
+	Quaternion rotation = vec4(0, 1, 0, 0);
 public:
 	virtual void init(Scene* scene) = 0;
 
+	virtual void tick(float time) {};
+
 #pragma region Getters/Setters
-	
+
 	void setPos(vec3 p)
 	{
 		pos = p;
@@ -478,9 +542,9 @@ public:
 	{
 		return pos;
 	}
-	
+
 #pragma endregion
-	
+
 	virtual void GetModelTransform(mat4& M, mat4& Minv)
 	{
 		M = ScaleMatrix(scale) * RotationMatrix(rotation.w, vec4_3(rotation)) * TranslateMatrix(pos);
@@ -493,9 +557,9 @@ public:
 class Camera : public Entity
 {
 	SHObject_Base(Camera)
-
-		vec3 wLookAt;
-	vec3 wVup;
+private:
+	vec3 wLookAt = vec3(0, 0, 0);
+	vec3 wVup = vec3(0, 1, 0);
 	float fov;
 	float aspect_ratio;
 	float near_plane;
@@ -517,8 +581,8 @@ public:
 
 	mat4 getViewMatrix()
 	{
-		vec3 w = normalize(pos - wLookAt);
-		vec3 u = normalize(cross(wVup, w));
+		vec3 w = normalize_fix(pos - wLookAt);
+		vec3 u = normalize_fix(cross(wVup, w));
 		vec3 v = cross(w, u);
 
 		return TranslateMatrix(pos * (-1))
@@ -548,26 +612,36 @@ class Light : public Entity
 {
 	SHObject_Base(Light)
 public:
+	void init(Scene* scene) override;
 	vec3 La, Le;
 	vec4 wLightPos; // With this, it can be at any point, even at infinite distance.....
-
 };
 
 
 class Renderer : public Entity
 {
 	SHObject_Base(Renderer)
-private:
+protected:
 	Geometry* shape;
 	Material* mat;
 public:
 
 	Renderer(Geometry* s, Material* m) : shape(s), mat(m)
 	{
-
+		this->rotation = vec4(0, 1, 0, 0);
 	}
 
 	void init(Scene* scene) override;
+
+	void tick(float time) override
+	{
+		time /= 10;
+		float r = this->rotation.w;
+		r += time * (2.0f / 180);
+		this->rotation = vec4(0, 1, 0, r);
+
+		shape->Tick(time);
+	}
 
 	void Render(RenderState state)
 	{
@@ -608,6 +682,13 @@ public:
 		if (e->GetTypeId() == Camera::TypeId() && mainCamera == nullptr)
 		{
 			mainCamera = (Camera*)e;
+		}
+		else if (e->GetTypeId() == Light::TypeId()) {
+			LightData a;
+			a.La = ((Light*)e)->La;
+			a.Le = ((Light*)e)->Le;
+			a.wLightPos = ((Light*)e)->wLightPos;
+			lights.push_back(a);
 		}
 	}
 
@@ -650,23 +731,31 @@ public:
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // clear the screen
 
 		Camera* cam = activeScene->getMainCam();
-		
+
 		RenderState state;
 		state.camPos = cam->getPos();
 		state.V = cam->getViewMatrix();
 		state.P = cam->getProjectonMatrix();
 		state.lights = activeScene->getLightData();
-		
+
 		for (Entity* obj : activeScene->getObjects())
 		{
-			if(obj->GetTypeId() == Renderer::TypeId())
+			if (obj->GetTypeId() == Renderer::TypeId())
 			{
 				((Renderer*)obj)->Render(state);
 			}
 		}
-		
+
 		glutSwapBuffers(); // exchange buffers for double buffering
 	}
+
+	void tick(long time)
+	{
+		for each (Entity * var in activeScene->getObjects())
+		{
+			var->tick(time);
+		}
+	};
 };
 
 
@@ -683,6 +772,10 @@ void Shader::setUniformLight(const LightData& light, const std::string& name)
 void Camera::init(Scene* scene)
 {
 	//scene->addEntity(this);
+}
+
+void Light::init(Scene* scene)
+{
 }
 
 void Renderer::init(Scene* scene)
@@ -703,30 +796,38 @@ Engine engine;
 
 // Initialization, create an OpenGL context
 void onInitialization() {
-	
+
 	engine.Init();
 
 	Scene* s = new Scene();
 
-	Texture* tex0 = new CheckerBoardTexture(2, 2);
-	
+	Texture* tex0 = new CheckerBoardTexture(1, 1);
+
 	Shader* phongShader = new PhongShader();
-	
+
 	Material* material0 = new Material;
 	material0->kd = vec3(0.6f, 0.4f, 0.2f);
 	material0->ks = vec3(4, 4, 4);
-	material0->ka = vec3(0.1f, 0.1f, 0.1f);
-	material0->shiny = 100;
+	material0->ka = vec3(0.5f, 0.5f, 0.5f);
+	material0->shiny = 100000;
 	material0->shader = phongShader;
 	material0->text = tex0;
 
-	Geometry* sphere = new Sphere();
+	Geometry* sphere = new WavySphere();
 
-	Renderer* obj1 = new Renderer(sphere,material0);
+	Renderer* obj1 = new Renderer(sphere, material0);
+	obj1->setPos(vec3(0, 0, 0));
 	s->addEntity(obj1);
 
+
+	Light* light0 = new Light();
+	light0->wLightPos = vec4(3, 3, 3, 0);
+	light0->La = vec3(0.7f, 0.7f, 0.7f);
+	light0->Le = vec3(3, 3, 3);
+	s->addEntity(light0);
+
 	Camera* cam = new Camera();
-	cam->setPos(vec3(0, 10, 0));
+	cam->setPos(vec3(0.1f, 0.1f, 5));
 	s->addEntity(cam);
 
 
@@ -774,7 +875,15 @@ void onMouse(int button, int state, int pX, int pY) { // pX, pY are the pixel co
 	}
 }
 
+
 // Idle event indicating that some time elapsed: do animation here
 void onIdle() {
 	long time = glutGet(GLUT_ELAPSED_TIME); // elapsed time since the start of the program
+	static float lastTime = 0;
+
+	float deltaTime = time - lastTime;
+	lastTime = time;
+	engine.tick(deltaTime);
+
+	glutPostRedisplay();
 }
