@@ -192,7 +192,7 @@ public:
 
 	void setUniformMaterial(const Material& material, const std::string& name)
 	{
-		printf("Binding Material data\n");
+		//printf("Binding Material data\n");
 		setUniform(material.kd, name + ".kd");
 		setUniform(material.ks, name + ".ks");
 		setUniform(material.ka, name + ".ka");
@@ -294,7 +294,7 @@ public:
 	PhongShader() { create(vertexSource, fragmentSource, "fragmentColor"); }
 
 	void Bind(const RenderState& state) {
-		printf("Binding Phong shader\n");
+		//printf("Binding Phong shader\n");
 
 		Use(); 		// make this program run
 		setUniform(state.MVP, "MVP");
@@ -318,7 +318,7 @@ class CheckerBoardTexture : public Texture
 {
 public:
 	CheckerBoardTexture(const int width = 0, const int height = 0) : Texture() {
-		printf("Created Checker Board Texture\n");
+		//printf("Created Checker Board Texture\n");
 
 		std::vector<vec4> image(width * height);
 		const vec4 yellow(1, 1, 0, 1), blue(0, 0, 1, 1);
@@ -340,7 +340,7 @@ protected:
 public:
 	Geometry()
 	{
-		printf("Construct Geometry\n");
+		//printf("Construct Geometry\n");
 
 		glGenVertexArrays(1, &vertex_array);
 		glBindVertexArray(vertex_array);
@@ -350,7 +350,7 @@ public:
 
 	~Geometry()
 	{
-		printf("Destruct Geometry\n");
+		//printf("Destruct Geometry\n");
 
 		glDeleteBuffers(1, &vertex_buffer);
 		glDeleteVertexArrays(1, &vertex_array);
@@ -404,7 +404,7 @@ public:
 
 	void create(int N = TESSELATION_LEVEL, int M = TESSELATION_LEVEL)
 	{
-		printf("Creating the Geometry (Param)\n");
+		//printf("Creating the Geometry (Param)\n");
 
 		vertexPerStrip = (M + 1) * 2;
 		stripCount = N;
@@ -432,7 +432,7 @@ public:
 
 	void Draw()
 	{
-		printf("Draw the Geometry (Param)\n");
+		//printf("Draw the Geometry (Param)\n");
 
 		glBindVertexArray(vertex_array);
 		for (unsigned int i = 0; i < stripCount; i++)
@@ -485,15 +485,53 @@ public:
 
 	void eval(Dnum2& U, Dnum2& V, Dnum2& X, Dnum2& Y, Dnum2& Z)
 	{
+		float anim = t / (10 * M_PI);
+
 		U = U * 2.0f * (float)M_PI;
 		V = V * (float)M_PI;
-		float anim = t / 20;
-		X = (cos(U) * sin(V)) + (cos(V * 5 + anim) / 4*M_PI);
-		Y = (sin(U) * sin(V)) + (sin(V * 5 + anim) / 4*M_PI);
-		Z = cos(V) ;
+
+		float slow_anim = anim / 10;
+		float magnitude = (1.0f / 20) * (abs(sinf(slow_anim)));
+		Dnum2 height = sin(V * 15 + anim) * magnitude;
+		height = height + 1;
+		//X = (cos(U) * sin(V)) + (sin(V*5 + anim)/4);
+		//Y = (sin(U) * sin(V)) + (sin(V*5 + anim)/4);
+
+		X = (cos(U) * sin(V)) * height;// ((sin(V * 10 + anim / 10) + 1) / 5));
+		Y = (sin(U) * sin(V)) * height;
+
+		Z = cos(V);// *((sin(V * 10 + anim / 10) / 10) + 1);
 	}
 };
 
+class ViralBody : public AnimatedSurface
+{
+public:
+	ViralBody()
+	{
+		create();
+	}
+
+	void eval(Dnum2& U, Dnum2& V, Dnum2& X, Dnum2& Y, Dnum2& Z)
+	{
+		float anim = t / (10 * M_PI);
+
+		U = U * 2.0f * (float)M_PI;
+		V = V * (float)M_PI;
+
+		float slow_anim = anim / 10;
+		float magnitude = (1.0f / 20) * (abs(sinf(slow_anim)));
+		Dnum2 height = sin(V * 15 + anim) * magnitude;
+		height = height + 1;
+		//X = (cos(U) * sin(V)) + (sin(V*5 + anim)/4);
+		//Y = (sin(U) * sin(V)) + (sin(V*5 + anim)/4);
+
+		X = (cos(U) * sin(V)) * height;// ((sin(V * 10 + anim / 10) + 1) / 5));
+		Y = (sin(U) * sin(V)) * height;
+
+		Z = cos(V);// *((sin(V * 10 + anim / 10) / 10) + 1);
+	}
+};
 
 class Tractricoid : public ParamSurface
 {
@@ -813,7 +851,7 @@ void onInitialization() {
 	material0->shader = phongShader;
 	material0->text = tex0;
 
-	Geometry* sphere = new WavySphere();
+	Geometry* sphere = new Tractricoid();
 
 	Renderer* obj1 = new Renderer(sphere, material0);
 	obj1->setPos(vec3(0, 0, 0));
@@ -853,7 +891,7 @@ void onMouseMotion(int pX, int pY) {	// pX, pY are the pixel coordinates of the 
 	// Convert to normalized device space
 	float cX = 2.0f * pX / windowWidth - 1;	// flip y axis
 	float cY = 1.0f - 2.0f * pY / windowHeight;
-	printf("Mouse moved to (%3.2f, %3.2f)\n", cX, cY);
+	//printf("Mouse moved to (%3.2f, %3.2f)\n", cX, cY);
 }
 
 // Mouse click event
