@@ -92,48 +92,44 @@ bool operator!=(const vec4& a, const vec4& b)
 
 inline vec3 normalize_fix(const vec3& v) { return (v != vec3(0, 0, 0)) ? v  / length(v) : vec3(0, 0, 0); }
 
+inline float lengthsqr(const vec3& v) { return v.x * v.x + v.y * v.y + v.z * v.z; }
+
+
 inline float lengthsqr(const vec4& v1) { return (v1.x * v1.x + v1.y * v1.y + v1.z * v1.z + v1.w * v1.w); }
 
 inline float length(const vec4& v1) { return sqrt(lengthsqr(v1)); }
 
-inline vec4 normalize(const vec4& v) { return v / length(v); }
-
-inline float lengthsqr(const vec3& v) { return dot(v, v); }
-
-Quaternion FindBetween_Helper(const vec3& A, const vec3& B, float NormAB)
+inline vec4 normalize(const vec4& value)
 {
-	float W = NormAB + dot(A, B);
-	Quaternion Result;
+	Quaternion ans;
 
-	vec3 axis = cross(A, B);
-	
-	//Axis = FVector::CrossProduct(A, B);
-	//Result = Quaternion(
-	//	A.y * B.z - A.z * B.y,
-	//	A.z * B.x - A.x * B.z,
-	//	A.x * B.y - A.y * B.x,
-	//	W);
-	Result = Quaternion(
-		axis.x, axis.y, axis.z,
-		W);
-	
+	float ls = value.x * value.x + value.y * value.y + value.z * value.z + value.w * value.w;
 
-	normalize(Result);
-	return Result;
+	float invNorm = 1.0f / sqrt(ls);
+
+	ans.x = value.x * invNorm;
+	ans.y = value.y * invNorm;
+	ans.z = value.z * invNorm;
+	ans.w = value.w * invNorm;
+
+	return ans;
+
+	
+	//return v / length(v);
 }
+
 
 inline Quaternion FromTo(vec3 from, vec3 to)
 {
-	const float NormAB = sqrt(lengthsqr(from) * lengthsqr(to));
-	return FindBetween_Helper(from, to, 1);
+	const float NormAB = sqrtf(lengthsqr(from) * lengthsqr(to));
 	
 	Quaternion r;
-	vec3 a = cross(from, to);
+	vec3 a =  cross(from, to);
 	r.x = a.x;
 	r.y = a.y;
 	r.z = a.z;
 	
-	r.w = sqrtf(dot(from,to)+1);
+	r.w = dot(from,to)+NormAB;
 
 	return normalize(r);
 }
@@ -398,7 +394,7 @@ public:
 		const vec4 yellow(1, 1, 0, 1), blue(0, 0, 1, 1);
 		for (int x = 0; x < Twidth; x++)
 			for (int y = 0; y < Theight; y++) {
-			image[y * Twidth + x] = (x / Sheight) % 2 ==0  ? yellow : blue;
+			image[y * Twidth + x] = (y / Sheight) % 2 ==0  ? yellow : blue;
 		}
 		create(Twidth, Theight, image, GL_NEAREST);
 	}
@@ -486,7 +482,7 @@ public:
 		vec3 drdU(X.d.x, Y.d.x, Z.d.x);
 		vec3 drdV(X.d.y, Y.d.y, Z.d.y);
 
-		res.normal = normalize_fix( cross(drdU, drdV));
+		res.normal =  cross(drdU, drdV);
 
 		return res;
 	}
@@ -606,7 +602,7 @@ public:
 		height = height + 1;
 		//X = (cos(U) * sin(V)) + (sin(V*5 + anim)/4);
 		//Y = (sin(U) * sin(V)) + (sin(V*5 + anim)/4);
-		height = 1;
+		//height = 1;
 
 		X = (cos(U) * sin(V)) * height;// ((sin(V * 10 + anim / 10) + 1) / 5));
 		Y = (sin(U) * sin(V)) * height;
@@ -791,6 +787,7 @@ public:
 class Virus : public Entity
 {
 	Material* material0;
+	Material* tentacle_mat;
 	
 	Renderer* body;
 
@@ -801,7 +798,7 @@ public:
 	
 	Virus()
 	{
-		Texture* tex0 = new StripesTexture(1, 12,2);
+		Texture* tex0 = new StripesTexture(1, 50,2);
 
 		Shader* phongShader = new PhongShader();
 		
@@ -812,6 +809,14 @@ public:
 		material0->shiny = 100000;
 		material0->shader = phongShader;
 		material0->text = tex0;
+
+		tentacle_mat = new Material;
+		tentacle_mat->kd = vec3(0.6f, 0.4f, 0.2f);
+		tentacle_mat->ks = vec3(4, 4, 4);
+		tentacle_mat->ka = vec3(0.5f, 0.5f, 0.5f);
+		tentacle_mat->shiny = 100000;
+		tentacle_mat->shader = phongShader;
+		tentacle_mat->text = tex0;
 		
 		Geometry* sphere = new WavySphere();
 		body = new Renderer(sphere, material0);
@@ -826,21 +831,28 @@ public:
 	{
 		Renderer* ten = new Renderer(tentacleMesh, material0);
 		ten->setParent(this);
-		ten->setScale(vec3(0.2f, 0.2f, 0.2f));
+		//ten->setScale(vec3(0.2f, 0.2f, 0.2f));
 
-		
-		vec3 pos = body->getMesh()->GetPosAt(vec2(M_PI_2, M_PI_2));
-		vec3 normal = body->getMesh()->GetNormalAt(vec2(M_PI_2, M_PI_2));
-		
-		pos = pos + (normalize(normal) * (3*0.2f));
-		ten->setPos(pos);
-		
-		
-		Quaternion rot = FromTo(vec3(0, 0, 1.0f), normal);
-		rot = rot == vec4(0, 0, 0, 0) ? vec4(0, 1, 0, 0) : rot;
-		ten->setRot(rot);
+		setTentaclePos(ten);
 		
 		return ten;
+	}
+
+	void setTentaclePos(Renderer* ten)
+	{
+		vec3 pos = body->getMesh()->GetPosAt(vec2(M_PI_2, M_PI_2));
+		vec3 normal = body->getMesh()->GetNormalAt(vec2(M_PI_2, M_PI_2));
+		printf("Raw normal length: %f \n", length(normal));
+
+		
+		pos = pos + (normalize(normal) * 2.0f);
+		ten->setPos(pos);
+
+
+		Quaternion rot = FromTo(vec3(0, 0, 1), normal);
+		//rot = rot == vec4(0, 0, 0, 0) ? vec4(0, 1, 0, 0) : rot;
+		printf("Quat length: %f \n", length(rot));
+		ten->setRot(rot);
 	}
 	
 	void tick(float dt)
@@ -961,7 +973,7 @@ public:
 	{
 		glViewport(0, 0, windowWidth, windowHeight);
 		glEnable(GL_DEPTH_TEST);
-		glEnable(GL_CULL_FACE);
+		//glEnable(GL_CULL_FACE);
 	}
 
 	void LoadScene(Scene* s)
