@@ -79,7 +79,65 @@ bool operator!=(const vec3& a, const vec3& b)
 	return !(a == b);
 }
 
-inline vec3 normalize_fix(const vec3& v) { return (v != vec3(0, 0, 0)) ? v * (1 / length(v)) : vec3(0, 0, 0); }
+
+bool operator==(const vec4& a, const vec4& b)
+{
+	return a.x == b.x && a.y == b.y && a.z == b.z && a.w == b.w;
+}
+
+bool operator!=(const vec4& a, const vec4& b)
+{
+	return !(a == b);
+}
+
+inline vec3 normalize_fix(const vec3& v) { return (v != vec3(0, 0, 0)) ? v  / length(v) : vec3(0, 0, 0); }
+
+inline float lengthsqr(const vec4& v1) { return (v1.x * v1.x + v1.y * v1.y + v1.z * v1.z + v1.w * v1.w); }
+
+inline float length(const vec4& v1) { return sqrt(lengthsqr(v1)); }
+
+inline vec4 normalize(const vec4& v) { return v / length(v); }
+
+inline float lengthsqr(const vec3& v) { return dot(v, v); }
+
+Quaternion FindBetween_Helper(const vec3& A, const vec3& B, float NormAB)
+{
+	float W = NormAB + dot(A, B);
+	Quaternion Result;
+
+	vec3 axis = cross(A, B);
+	
+	//Axis = FVector::CrossProduct(A, B);
+	//Result = Quaternion(
+	//	A.y * B.z - A.z * B.y,
+	//	A.z * B.x - A.x * B.z,
+	//	A.x * B.y - A.y * B.x,
+	//	W);
+	Result = Quaternion(
+		axis.x, axis.y, axis.z,
+		W);
+	
+
+	normalize(Result);
+	return Result;
+}
+
+inline Quaternion FromTo(vec3 from, vec3 to)
+{
+	const float NormAB = sqrt(lengthsqr(from) * lengthsqr(to));
+	return FindBetween_Helper(from, to, 1);
+	
+	Quaternion r;
+	vec3 a = cross(from, to);
+	r.x = a.x;
+	r.y = a.y;
+	r.z = a.z;
+	
+	r.w = sqrtf(dot(from,to)+1);
+
+	return normalize(r);
+}
+
 #pragma endregion
 
 
@@ -287,6 +345,7 @@ class PhongShader : public Shader
                            (kd * texColor * cost + material.ks * pow(cosd, material.shininess)) * lights[i].Le;
 			}
 			fragmentColor = vec4(radiance, 1);
+			//fragmentColor = vec4(N,1);
 		}
 	)";
 #pragma endregion Shader
@@ -329,6 +388,21 @@ public:
 	}
 };
 
+class StripesTexture : public Texture
+{
+public:
+	StripesTexture(const int Twidth = 0, const int Theight = 0, const int Sheight = 1) : Texture() {
+		//printf("Created Checker Board Texture\n");
+
+		std::vector<vec4> image(Twidth * Theight);
+		const vec4 yellow(1, 1, 0, 1), blue(0, 0, 1, 1);
+		for (int x = 0; x < Twidth; x++)
+			for (int y = 0; y < Theight; y++) {
+			image[y * Twidth + x] = (x / Sheight) % 2 ==0  ? yellow : blue;
+		}
+		create(Twidth, Theight, image, GL_NEAREST);
+	}
+};
 
 #pragma region Geometry
 
@@ -359,6 +433,10 @@ public:
 	virtual void Tick(float deltaTime) {};
 
 	virtual void Draw() = 0;
+
+	virtual vec3 GetNormalAt(vec2 pos) = 0;
+
+	virtual vec3 GetPosAt(vec2 pos) = 0;
 };
 
 class ParamSurface : public Geometry
@@ -379,11 +457,22 @@ public:
 
 	}
 
+	virtual vec3 GetNormalAt(vec2 pos)
+	{
+		return GetVertexData(pos.x, pos.y).normal;
+	}
+
+	virtual vec3 GetPosAt(vec2 pos)
+	{
+		vec3 a = GetVertexData(pos.x, pos.y).pos;
+		return a;
+	}
+
+	
 	virtual void eval(Dnum2& U, Dnum2& V, Dnum2& X, Dnum2& Y, Dnum2& Z) = 0;
 
 	VertexData GetVertexData(float u, float v)
 	{
-
 		VertexData res;
 		res.textcoord = vec2(u, v);
 		Dnum2 X, Y, Z;
@@ -397,7 +486,7 @@ public:
 		vec3 drdU(X.d.x, Y.d.x, Z.d.x);
 		vec3 drdV(X.d.y, Y.d.y, Z.d.y);
 
-		res.normal = cross(drdU, drdV);
+		res.normal = normalize_fix( cross(drdU, drdV));
 
 		return res;
 	}
@@ -418,6 +507,8 @@ public:
 			}
 		}
 
+		glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);
+		glBindVertexArray(vertex_array);
 		glBufferData(GL_ARRAY_BUFFER, vertexPerStrip * stripCount * sizeof(VertexData), &vertexData[0], GL_STATIC_DRAW);
 		//Vertex atribute array enable
 		glEnableVertexAttribArray(0);
@@ -462,6 +553,25 @@ public:
 	}
 };
 
+class Tractricoid : public ParamSurface
+{
+public:
+	Tractricoid()
+	{
+		create();
+	}
+
+	void eval(Dnum2& U, Dnum2& V, Dnum2& X, Dnum2& Y, Dnum2& Z)
+	{
+		const float height = 3.0f;
+		U = U * height;
+		V = V * 2 * M_PI;
+		X = cos(V) / cosh(U);
+		Y = sin(V) / cosh(U);
+		Z = U - tanh(U);
+	}
+};
+
 class AnimatedSurface : public ParamSurface
 {
 protected:
@@ -491,11 +601,12 @@ public:
 		V = V * (float)M_PI;
 
 		float slow_anim = anim / 10;
-		float magnitude = (1.0f / 20) * (abs(sinf(slow_anim)));
+		float magnitude = (1.0f / 20) *(abs(sinf(slow_anim)));
 		Dnum2 height = sin(V * 15 + anim) * magnitude;
 		height = height + 1;
 		//X = (cos(U) * sin(V)) + (sin(V*5 + anim)/4);
 		//Y = (sin(U) * sin(V)) + (sin(V*5 + anim)/4);
+		height = 1;
 
 		X = (cos(U) * sin(V)) * height;// ((sin(V * 10 + anim / 10) + 1) / 5));
 		Y = (sin(U) * sin(V)) * height;
@@ -504,55 +615,7 @@ public:
 	}
 };
 
-class ViralBody : public AnimatedSurface
-{
-public:
-	ViralBody()
-	{
-		create();
-	}
-
-	void eval(Dnum2& U, Dnum2& V, Dnum2& X, Dnum2& Y, Dnum2& Z)
-	{
-		float anim = t / (10 * M_PI);
-
-		U = U * 2.0f * (float)M_PI;
-		V = V * (float)M_PI;
-
-		float slow_anim = anim / 10;
-		float magnitude = (1.0f / 20) * (abs(sinf(slow_anim)));
-		Dnum2 height = sin(V * 15 + anim) * magnitude;
-		height = height + 1;
-		//X = (cos(U) * sin(V)) + (sin(V*5 + anim)/4);
-		//Y = (sin(U) * sin(V)) + (sin(V*5 + anim)/4);
-
-		X = (cos(U) * sin(V)) * height;// ((sin(V * 10 + anim / 10) + 1) / 5));
-		Y = (sin(U) * sin(V)) * height;
-
-		Z = cos(V);// *((sin(V * 10 + anim / 10) / 10) + 1);
-	}
-};
-
-class Tractricoid : public ParamSurface
-{
-public:
-	Tractricoid()
-	{
-		create();
-	}
-
-	void eval(Dnum2& U, Dnum2& V, Dnum2& X, Dnum2& Y, Dnum2& Z)
-	{
-		const float height = 3.0f;
-		U = U * height;
-		V = V * 2 * M_PI;
-		X = cos(V) / cosh(U);
-		Y = sin(V) / cosh(U);
-		Z = U - tanh(U);
-	}
-};
-
-#pragma endregion Entities
+#pragma endregion Geometry
 
 
 #pragma region Entities
@@ -564,10 +627,14 @@ protected:
 	vec3 pos = vec3(0, 0, 0);
 	vec3 scale = vec3(1, 1, 1);
 	Quaternion rotation = vec4(0, 1, 0, 0);
+
+	Entity* parent = nullptr;
 public:
 	virtual void init(Scene* scene) = 0;
 
 	virtual void tick(float time) {};
+
+	virtual void render(RenderState state) {};
 
 #pragma region Getters/Setters
 
@@ -581,12 +648,36 @@ public:
 		return pos;
 	}
 
+	void setScale(vec3 s)
+	{
+		this->scale = s;
+	}
+
+	void setRot(Quaternion r)
+	{
+		rotation = r;
+	}
+	
+	void setParent(Entity* e)
+	{
+		parent = e;
+	}
+	
 #pragma endregion
 
 	virtual void GetModelTransform(mat4& M, mat4& Minv)
 	{
 		M = ScaleMatrix(scale) * RotationMatrix(rotation.w, vec4_3(rotation)) * TranslateMatrix(pos);
 		Minv = TranslateMatrix(-pos) * RotationMatrix(-rotation.w, vec4_3(rotation)) * ScaleMatrix(vec3(1 / scale.x, 1 / scale.y, 1 / scale.z));
+
+		if(parent != nullptr)
+		{
+			mat4 Mparent;
+			mat4 MparentInv;
+			parent->GetModelTransform(Mparent, MparentInv);
+			M = M * Mparent;
+			Minv = Minv * MparentInv;
+		}
 	}
 
 };
@@ -669,19 +760,16 @@ public:
 		this->rotation = vec4(0, 1, 0, 0);
 	}
 
+	Geometry* getMesh() { return shape; }
+	
 	void init(Scene* scene) override;
 
 	void tick(float time) override
 	{
-		time /= 10;
-		float r = this->rotation.w;
-		r += time * (2.0f / 180);
-		this->rotation = vec4(0, 1, 0, r);
-
 		shape->Tick(time);
 	}
 
-	void Render(RenderState state)
+	void render(RenderState state) override
 	{
 		mat4 M, Minv;
 		GetModelTransform(M, Minv);
@@ -694,6 +782,124 @@ public:
 		mat->Bind(state);
 		shape->Draw();
 	}
+};
+
+
+//This is the virus
+//It holds the base model
+//And updates the tentacles each frame to align to the surface
+class Virus : public Entity
+{
+	Material* material0;
+	
+	Renderer* body;
+
+	Geometry* tentacleMesh;
+	std::vector<Renderer*> tentecles;
+	
+public:
+	
+	Virus()
+	{
+		Texture* tex0 = new StripesTexture(1, 12,2);
+
+		Shader* phongShader = new PhongShader();
+		
+		material0 = new Material;
+		material0->kd = vec3(0.6f, 0.4f, 0.2f);
+		material0->ks = vec3(4, 4, 4);
+		material0->ka = vec3(0.5f, 0.5f, 0.5f);
+		material0->shiny = 100000;
+		material0->shader = phongShader;
+		material0->text = tex0;
+		
+		Geometry* sphere = new WavySphere();
+		body = new Renderer(sphere, material0);
+		body->setParent(this);
+
+		tentacleMesh = new Tractricoid();
+		
+		tentecles.push_back(createTentacle());
+	}
+
+	Renderer* createTentacle()
+	{
+		Renderer* ten = new Renderer(tentacleMesh, material0);
+		ten->setParent(this);
+		ten->setScale(vec3(0.2f, 0.2f, 0.2f));
+
+		
+		vec3 pos = body->getMesh()->GetPosAt(vec2(M_PI_2, M_PI_2));
+		vec3 normal = body->getMesh()->GetNormalAt(vec2(M_PI_2, M_PI_2));
+		
+		pos = pos + (normalize(normal) * (3*0.2f));
+		ten->setPos(pos);
+		
+		
+		Quaternion rot = FromTo(vec3(0, 0, 1.0f), normal);
+		rot = rot == vec4(0, 0, 0, 0) ? vec4(0, 1, 0, 0) : rot;
+		ten->setRot(rot);
+		
+		return ten;
+	}
+	
+	void tick(float dt)
+	{
+		dt /= 10;
+		float r = this->rotation.w;
+		r += dt * (2.0f / 180);
+		this->rotation = vec4(0, 1, 0, r);
+		
+		body->tick(dt);
+	}
+	
+	void render(RenderState state) override
+	{
+		body->render(state);
+
+		for each (auto* var in tentecles)
+		{
+			var->render(state);
+		}
+	}
+
+
+	void init(Scene* scene) override;
+};
+
+class Antibody : public Entity
+{
+	Material* material0;
+
+	Renderer* body;
+	
+public:
+	
+	Antibody()
+	{
+		Texture* tex0 = new StripesTexture(1, 12, 2);
+
+		Shader* phongShader = new PhongShader();
+
+		material0 = new Material;
+		material0->kd = vec3(0.6f, 0.4f, 0.2f);
+		material0->ks = vec3(4, 4, 4);
+		material0->ka = vec3(0.5f, 0.5f, 0.5f);
+		material0->shiny = 100000;
+		material0->shader = phongShader;
+		material0->text = tex0;
+
+		Geometry* sphere = new WavySphere();
+		body = new Renderer(sphere, material0);
+		body->setParent(this);
+	}
+	
+	void render(RenderState state) override
+	{
+		body->render(state);
+	}
+
+	void init(Scene* scene) override {};
 };
 
 #pragma endregion Entities
@@ -778,10 +984,7 @@ public:
 
 		for (Entity* obj : activeScene->getObjects())
 		{
-			if (obj->GetTypeId() == Renderer::TypeId())
-			{
-				((Renderer*)obj)->Render(state);
-			}
+			obj->render(state);
 		}
 
 		glutSwapBuffers(); // exchange buffers for double buffering
@@ -821,6 +1024,11 @@ void Renderer::init(Scene* scene)
 	//scene->addEntity(this);
 }
 
+void Virus::init(Scene* scene)
+{
+	//scene->addEntity(this);
+}
+
 void Material::Bind(RenderState& state)
 {
 	state.material = this;
@@ -838,7 +1046,7 @@ void onInitialization() {
 	engine.Init();
 
 	Scene* s = new Scene();
-
+	/*
 	Texture* tex0 = new CheckerBoardTexture(1, 1);
 
 	Shader* phongShader = new PhongShader();
@@ -851,9 +1059,10 @@ void onInitialization() {
 	material0->shader = phongShader;
 	material0->text = tex0;
 
-	Geometry* sphere = new Tractricoid();
-
-	Renderer* obj1 = new Renderer(sphere, material0);
+	Geometry* sphere = new WavySphere();
+	*/
+	
+	Entity* obj1 = new Virus();
 	obj1->setPos(vec3(0, 0, 0));
 	s->addEntity(obj1);
 
