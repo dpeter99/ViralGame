@@ -55,15 +55,15 @@ template<class T> struct Dnum
 };
 
 //Basic functions for derivation
-template<class T> Dnum<T> exp(Dnum<T> g) { return Dnum<T>(expf(g.f), expf(g.f) * g.d); }
-template<class T> Dnum<T> sin(Dnum<T> g) { return Dnum<T>(sinf(g.f), cosf(g.f) * g.d); }
-template<class T> Dnum<T> cos(Dnum<T> g) { return Dnum<T>(cosf(g.f), -sinf(g.f) * g.d); }
-template<class T> Dnum<T> tan(Dnum<T> g) { return sin(g) / cos(g); }
-template<class T> Dnum<T> sinh(Dnum<T> g) { return Dnum<T>(sinh(g.f), cosh(g.f) * g.d); }
-template<class T> Dnum<T> cosh(Dnum<T> g) { return Dnum<T>(cosh(g.f), sinh(g.f) * g.d); }
-template<class T> Dnum<T> tanh(Dnum<T> g) { return sinh(g) / cosh(g); }
-template<class T> Dnum<T> log(Dnum<T> g) { return Dnum<T>(logf(g.f), g.d / g.f); }
-template<class T> Dnum<T> pow(Dnum<T> g, float n) { return Dnum<T>(powf(g.f, n), n * powf(g.f, n - 1) * g.d); }
+template<class T> Dnum<T> Exp(Dnum<T> g) { return Dnum<T>(expf(g.f), expf(g.f) * g.d); }
+template<class T> Dnum<T> Sin(Dnum<T> g) { return Dnum<T>(sinf(g.f), cosf(g.f) * g.d); }
+template<class T> Dnum<T> Cos(Dnum<T> g) { return Dnum<T>(cosf(g.f), -sinf(g.f) * g.d); }
+template<class T> Dnum<T> Tan(Dnum<T> g) { return Sin(g) / Cos(g); }
+template<class T> Dnum<T> Sinh(Dnum<T> g) { return Dnum<T>(sinh(g.f), cosh(g.f) * g.d); }
+template<class T> Dnum<T> Cosh(Dnum<T> g) { return Dnum<T>(cosh(g.f), sinh(g.f) * g.d); }
+template<class T> Dnum<T> Tanh(Dnum<T> g) { return Sinh(g) / Cosh(g); }
+template<class T> Dnum<T> Log(Dnum<T> g) { return Dnum<T>(logf(g.f), g.d / g.f); }
+template<class T> Dnum<T> Pow(Dnum<T> g, float n) { return Dnum<T>(powf(g.f, n), n * powf(g.f, n - 1) * g.d); }
 
 typedef Dnum<vec2> Dnum2;
 
@@ -90,14 +90,15 @@ bool operator!=(const vec4& a, const vec4& b)
 	return !(a == b);
 }
 
+
 inline vec3 normalize_fix(const vec3& v) { return (v != vec3(0, 0, 0)) ? v  / length(v) : vec3(0, 0, 0); }
 
-inline float lengthsqr(const vec3& v) { return v.x * v.x + v.y * v.y + v.z * v.z; }
+inline float length_squared(const vec3& v) { return v.x * v.x + v.y * v.y + v.z * v.z; }
 
 
-inline float lengthsqr(const vec4& v1) { return (v1.x * v1.x + v1.y * v1.y + v1.z * v1.z + v1.w * v1.w); }
+inline float length_squared(const vec4& v1) { return (v1.x * v1.x + v1.y * v1.y + v1.z * v1.z + v1.w * v1.w); }
 
-inline float length(const vec4& v1) { return sqrt(lengthsqr(v1)); }
+inline float length(const vec4& v1) { return sqrtf(length_squared(v1)); }
 
 inline vec4 normalize(const vec4& value)
 {
@@ -105,7 +106,7 @@ inline vec4 normalize(const vec4& value)
 
 	float ls = value.x * value.x + value.y * value.y + value.z * value.z + value.w * value.w;
 
-	float invNorm = 1.0f / sqrt(ls);
+	float invNorm = 1.0f / sqrtf(ls);
 
 	ans.x = value.x * invNorm;
 	ans.y = value.y * invNorm;
@@ -113,15 +114,12 @@ inline vec4 normalize(const vec4& value)
 	ans.w = value.w * invNorm;
 
 	return ans;
-
-	
-	//return v / length(v);
 }
 
 
 inline Quaternion FromTo(vec3 from, vec3 to)
 {
-	const float NormAB = sqrtf(lengthsqr(from) * lengthsqr(to));
+	const float NormAB = sqrtf(length_squared(from) * length_squared(to));
 	
 	Quaternion r;
 	vec3 a =  cross(from, to);
@@ -136,71 +134,12 @@ inline Quaternion FromTo(vec3 from, vec3 to)
 
 #pragma endregion
 
-
-#pragma region BaseObject
-
-/**
- * \brief This is the base class for every class in the Engine that uses runtime reflection.
- * Currently it provides a runtime TypeID and TypeName witch can be accesed as static and as class memebers.
- * The ID is a int type number witch is generated incramently, on the first call to get a type.
- * Each class that inherits from this or it's parent inheris form it must implement the
-	SHObject::GetType and SHObject::GetTypeId methodes and make it's own static methodes.
-	To make it easier a standard implementation of these can be used with the SHObject_Base() macro
-	witch implements all of these functions. It uses the typeid().name of the class.
- */
-class SHObject
-{
-protected:
-	/**
-	 * \brief Generates a new UID for each call
-	 * \return the next Unique ID that was just generated
-	 */
-	static uint64_t GenerateId() noexcept
-	{
-		static uint64_t count = 0;
-		return ++count;
-	}
-
-public:
-	/**
-	 * \brief Returns the top level class type name of the object
-	 * \return The class Class name as a string
-	 */
-	virtual const std::string& GetType() const = 0;
-	/**
-	 * \brief Gets the top level type ID
-	 * \return UID of the class
-	 */
-	virtual const uint64_t GetTypeId() const = 0;
-
-	virtual ~SHObject() = default;
-};
-
-
-/**
- * \brief Macro to make the override functions of SHObject. This should be added in each derived class
- * \param type The type of the class
- */
-#define SHObject_Base(type)	\
-public: \
-	static const std::string& Type()				{ static const std::string t = #type; return t; } \
-	static uint64_t TypeId()						{ static const uint64_t id = GenerateId(); return id; } \
-	const std::string& GetType() const override		{ return Type();  } \
-	const uint64_t GetTypeId() const override		{ return  type::TypeId(); } \
-private:
-
-#pragma endregion
-
-
-
 class Material;
 class Light;
 
 class Shader;
 class Light;
 class Scene;
-
-class LightData;
 
 
 struct RenderState
@@ -211,29 +150,19 @@ struct RenderState
 	mat4 V;
 	mat4 P;
 
-	Material* material;
-	std::vector<LightData> lights;
-	Texture* texture;
+	Material* material = nullptr;
+	std::vector<Light> lights;
+	Texture* texture = nullptr;
 	vec3 camPos;
 };
 
-
-
-class Material
+class Light
 {
 public:
-	vec3 kd = vec3(1, 1, 1);
-	vec3 ks;
-	vec3 ka;
-
-	float shiny;
-
-	Texture* text;
-
-	Shader* shader;
-
-	void Bind(RenderState& state);
+	vec3 La, Le;
+	vec4 wLightPos; // With this, it can be at any point, even at infinite distance.....
 };
+
 
 
 class Shader : public GPUProgram
@@ -253,9 +182,13 @@ public:
 		setUniform(material.shiny, name + ".shininess");
 	}
 
-	void setUniformLight(const LightData& light, const std::string& name);
+	void setUniformLight(const Light& light, const std::string& name)
+	{
+		setUniform(light.La, name + ".La");
+		setUniform(light.Le, name + ".Le");
+		setUniform(light.wLightPos, name + ".wLightPos");
+	}
 };
-
 
 class PhongShader : public Shader
 {
@@ -367,6 +300,26 @@ public:
 };
 
 
+class Material
+{
+public:
+	vec3 kd = vec3(1, 1, 1);
+	vec3 ks;
+	vec3 ka;
+
+	float shiny = 0;
+
+	Texture* text = nullptr;
+
+	Shader* shader = nullptr;
+
+	void Bind(RenderState& state)
+	{
+		state.material = this;
+		state.texture = text;
+		this->shader->Bind(state);
+	}
+};
 
 
 class CheckerBoardTexture : public Texture
@@ -410,8 +363,6 @@ protected:
 public:
 	Geometry()
 	{
-		//printf("Construct Geometry\n");
-
 		glGenVertexArrays(1, &vertex_array);
 		glBindVertexArray(vertex_array);
 		glGenBuffers(1, &vertex_buffer);
@@ -420,8 +371,6 @@ public:
 
 	~Geometry()
 	{
-		//printf("Destruct Geometry\n");
-
 		glDeleteBuffers(1, &vertex_buffer);
 		glDeleteVertexArrays(1, &vertex_array);
 	}
@@ -444,7 +393,7 @@ class ParamSurface : public Geometry
 	};
 
 	int vertexPerStrip;
-	int stripCount;
+	unsigned int stripCount;
 
 public:
 
@@ -543,9 +492,9 @@ public:
 		U = U * 2.0f * (float)M_PI;
 		V = V * (float)M_PI;
 
-		X = cos(U) * sin(V);
-		Y = sin(U) * sin(V);
-		Z = cos(V);
+		X = Cos(U) * Sin(V);
+		Y = Sin(U) * Sin(V);
+		Z = Cos(V);
 	}
 };
 
@@ -561,10 +510,10 @@ public:
 	{
 		const float height = 3.0f;
 		U = U * height;
-		V = V * 2 * M_PI;
-		X = cos(V) / cosh(U);
-		Y = sin(V) / cosh(U);
-		Z = U - tanh(U);
+		V = V * (2.0f * (float)M_PI);
+		X = Cos(V) / Cosh(U);
+		Y = Sin(V) / Cosh(U);
+		Z = U - Tanh(U);
 	}
 };
 
@@ -591,23 +540,23 @@ public:
 
 	void eval(Dnum2& U, Dnum2& V, Dnum2& X, Dnum2& Y, Dnum2& Z)
 	{
-		float anim = t / (10 * M_PI);
+		const float anim = t / (10.0f * (float)M_PI);
 
 		U = U * 2.0f * (float)M_PI;
 		V = V * (float)M_PI;
 
 		float slow_anim = anim / 10;
 		float magnitude = (1.0f / 20) *(abs(sinf(slow_anim)));
-		Dnum2 height = sin(V * 15 + anim) * magnitude;
+		Dnum2 height = Sin(V * 15 + anim) * magnitude;
 		height = height + 1;
 		//X = (cos(U) * sin(V)) + (sin(V*5 + anim)/4);
 		//Y = (sin(U) * sin(V)) + (sin(V*5 + anim)/4);
 		//height = 1;
 
-		X = (cos(U) * sin(V)) * height;// ((sin(V * 10 + anim / 10) + 1) / 5));
-		Y = (sin(U) * sin(V)) * height;
+		X = (Cos(U) * Sin(V)) * height;// ((sin(V * 10 + anim / 10) + 1) / 5));
+		Y = (Sin(U) * Sin(V)) * height;
 
-		Z = cos(V);// *((sin(V * 10 + anim / 10) / 10) + 1);
+		Z = Cos(V);// *((sin(V * 10 + anim / 10) / 10) + 1);
 	}
 };
 
@@ -616,9 +565,8 @@ public:
 
 #pragma region Entities
 
-class Entity : public SHObject
+class Entity 
 {
-	SHObject_Base(Entity)
 protected:
 	vec3 pos = vec3(0, 0, 0);
 	vec3 scale = vec3(1, 1, 1);
@@ -626,7 +574,6 @@ protected:
 
 	Entity* parent = nullptr;
 public:
-	virtual void init(Scene* scene) = 0;
 
 	virtual void tick(float time) {};
 
@@ -681,7 +628,6 @@ public:
 
 class Camera : public Entity
 {
-	SHObject_Base(Camera)
 private:
 	vec3 wLookAt = vec3(0, 0, 0);
 	vec3 wVup = vec3(0, 1, 0);
@@ -697,11 +643,6 @@ public:
 		fov = 75.0f * (float)M_PI / 180.0f;
 		near_plane = 1;
 		far_plane = 20;
-	};
-
-	~Camera()
-	{
-
 	};
 
 	mat4 getViewMatrix()
@@ -720,7 +661,7 @@ public:
 
 	mat4 getProjectonMatrix()
 	{
-		float a = tan(fov / 2);
+		float a = tanf(fov / 2);
 
 		return mat4(
 			1 / (a * aspect_ratio), 0, 0, 0,
@@ -730,22 +671,10 @@ public:
 			);
 	}
 
-	void init(Scene* scene) override;
 };
-
-class Light : public Entity
-{
-	SHObject_Base(Light)
-public:
-	void init(Scene* scene) override;
-	vec3 La, Le;
-	vec4 wLightPos; // With this, it can be at any point, even at infinite distance.....
-};
-
 
 class Renderer : public Entity
 {
-	SHObject_Base(Renderer)
 protected:
 	Geometry* shape;
 	Material* mat;
@@ -757,8 +686,7 @@ public:
 	}
 
 	Geometry* getMesh() { return shape; }
-	
-	void init(Scene* scene) override;
+
 
 	void tick(float time) override
 	{
@@ -779,7 +707,6 @@ public:
 		shape->Draw();
 	}
 };
-
 
 //This is the virus
 //It holds the base model
@@ -869,14 +796,12 @@ public:
 	{
 		body->render(state);
 
-		for each (auto* var in tentecles)
+		for (auto* var : tentecles)
 		{
 			var->render(state);
 		}
 	}
 
-
-	void init(Scene* scene) override;
 };
 
 class Antibody : public Entity
@@ -911,64 +836,21 @@ public:
 		body->render(state);
 	}
 
-	void init(Scene* scene) override {};
 };
 
 #pragma endregion Entities
 
-class LightData
-{
-public:
-	vec3 La, Le;
-	vec4 wLightPos; // With this, it can be at any point, even at infinite distance.....
-
-};
-
-class Scene
-{
-	std::vector<Entity*> entities;
-	Camera* mainCamera;
-
-	std::vector<LightData> lights;
-public:
-	void addEntity(Entity* e)
-	{
-		entities.push_back(e);
-		e->init(this);
-		if (e->GetTypeId() == Camera::TypeId() && mainCamera == nullptr)
-		{
-			mainCamera = (Camera*)e;
-		}
-		else if (e->GetTypeId() == Light::TypeId()) {
-			LightData a;
-			a.La = ((Light*)e)->La;
-			a.Le = ((Light*)e)->Le;
-			a.wLightPos = ((Light*)e)->wLightPos;
-			lights.push_back(a);
-		}
-	}
-
-	const std::vector<Entity*>& getObjects() const
-	{
-		return entities;
-	}
-
-	Camera* getMainCam() const
-	{
-		return mainCamera;
-	}
-
-	const std::vector<LightData>& getLightData()
-	{
-		return lights;
-	}
-};
 
 class Engine
 {
-	Scene* activeScene;
+	std::vector<Entity*> entities;
+	Camera* mainCamera = nullptr;
 
+	std::vector<Light> lights;
+	
 public:
+
+	
 	void Init()
 	{
 		glViewport(0, 0, windowWidth, windowHeight);
@@ -976,9 +858,19 @@ public:
 		//glEnable(GL_CULL_FACE);
 	}
 
-	void LoadScene(Scene* s)
+	void addEntity(Entity* e)
 	{
-		activeScene = s;
+		entities.push_back(e);
+	}
+
+	void addLight(Light e)
+	{
+		lights.push_back(e);
+	}
+
+	void setCamera(Camera* cam)
+	{
+		mainCamera = cam;
 	}
 
 	void Render()
@@ -986,15 +878,13 @@ public:
 		glClearColor(0, 0, 0, 0);     // background color
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // clear the screen
 
-		Camera* cam = activeScene->getMainCam();
-
 		RenderState state;
-		state.camPos = cam->getPos();
-		state.V = cam->getViewMatrix();
-		state.P = cam->getProjectonMatrix();
-		state.lights = activeScene->getLightData();
+		state.camPos = mainCamera->getPos();
+		state.V = mainCamera->getViewMatrix();
+		state.P = mainCamera->getProjectonMatrix();
+		state.lights = lights;
 
-		for (Entity* obj : activeScene->getObjects())
+		for (Entity* obj : entities)
 		{
 			obj->render(state);
 		}
@@ -1002,9 +892,9 @@ public:
 		glutSwapBuffers(); // exchange buffers for double buffering
 	}
 
-	void tick(long time)
+	void tick(float time)
 	{
-		for each (Entity * var in activeScene->getObjects())
+		for (Entity * var : entities)
 		{
 			var->tick(time);
 		}
@@ -1012,41 +902,11 @@ public:
 };
 
 
-
 #pragma region Late Function declaration
 
-void Shader::setUniformLight(const LightData& light, const std::string& name)
-{
-	setUniform(light.La, name + ".La");
-	setUniform(light.Le, name + ".Le");
-	setUniform(light.wLightPos, name + ".wLightPos");
-}
 
-void Camera::init(Scene* scene)
-{
-	//scene->addEntity(this);
-}
 
-void Light::init(Scene* scene)
-{
-}
 
-void Renderer::init(Scene* scene)
-{
-	//scene->addEntity(this);
-}
-
-void Virus::init(Scene* scene)
-{
-	//scene->addEntity(this);
-}
-
-void Material::Bind(RenderState& state)
-{
-	state.material = this;
-	state.texture = text;
-	this->shader->Bind(state);
-}
 
 #pragma endregion
 
@@ -1056,41 +916,22 @@ Engine engine;
 void onInitialization() {
 
 	engine.Init();
-
-	Scene* s = new Scene();
-	/*
-	Texture* tex0 = new CheckerBoardTexture(1, 1);
-
-	Shader* phongShader = new PhongShader();
-
-	Material* material0 = new Material;
-	material0->kd = vec3(0.6f, 0.4f, 0.2f);
-	material0->ks = vec3(4, 4, 4);
-	material0->ka = vec3(0.5f, 0.5f, 0.5f);
-	material0->shiny = 100000;
-	material0->shader = phongShader;
-	material0->text = tex0;
-
-	Geometry* sphere = new WavySphere();
-	*/
 	
 	Entity* obj1 = new Virus();
 	obj1->setPos(vec3(0, 0, 0));
-	s->addEntity(obj1);
+	engine.addEntity(obj1);
 
 
-	Light* light0 = new Light();
-	light0->wLightPos = vec4(3, 3, 3, 0);
-	light0->La = vec3(0.7f, 0.7f, 0.7f);
-	light0->Le = vec3(3, 3, 3);
-	s->addEntity(light0);
+	Light light0;
+	light0.wLightPos = vec4(3, 3, 3, 0);
+	light0.La = vec3(0.7f, 0.7f, 0.7f);
+	light0.Le = vec3(3, 3, 3);
+	engine.addLight(light0);
 
 	Camera* cam = new Camera();
 	cam->setPos(vec3(0.1f, 0.1f, 5));
-	s->addEntity(cam);
+	engine.setCamera(cam);
 
-
-	engine.LoadScene(s);
 }
 
 // Window has become invalid: Redraw
@@ -1118,6 +959,7 @@ void onMouseMotion(int pX, int pY) {	// pX, pY are the pixel coordinates of the 
 // Mouse click event
 void onMouse(int button, int state, int pX, int pY) { // pX, pY are the pixel coordinates of the cursor in the coordinate system of the operation system
 	// Convert to normalized device space
+	/*
 	float cX = 2.0f * pX / windowWidth - 1;	// flip y axis
 	float cY = 1.0f - 2.0f * pY / windowHeight;
 
@@ -1132,15 +974,16 @@ void onMouse(int button, int state, int pX, int pY) { // pX, pY are the pixel co
 	case GLUT_MIDDLE_BUTTON: printf("Middle button %s at (%3.2f, %3.2f)\n", buttonStat, cX, cY); break;
 	case GLUT_RIGHT_BUTTON:  printf("Right button %s at (%3.2f, %3.2f)\n", buttonStat, cX, cY);  break;
 	}
+	*/
 }
 
 
 // Idle event indicating that some time elapsed: do animation here
 void onIdle() {
 	long time = glutGet(GLUT_ELAPSED_TIME); // elapsed time since the start of the program
-	static float lastTime = 0;
+	static long lastTime = 0;
 
-	float deltaTime = time - lastTime;
+	const float deltaTime = time - lastTime;
 	lastTime = time;
 	engine.tick(deltaTime);
 
