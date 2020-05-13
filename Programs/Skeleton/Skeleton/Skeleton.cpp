@@ -91,7 +91,7 @@ bool operator!=(const vec4& a, const vec4& b)
 }
 
 
-inline vec3 normalize_fix(const vec3& v) { return (v != vec3(0, 0, 0)) ? v  / length(v) : vec3(0, 0, 0); }
+inline vec3 normalize_fix(const vec3& v) { return (v != vec3(0, 0, 0)) ? v / length(v) : vec3(0, 0, 0); }
 
 inline float length_squared(const vec3& v) { return v.x * v.x + v.y * v.y + v.z * v.z; }
 
@@ -116,18 +116,17 @@ inline vec4 normalize(const vec4& value)
 	return ans;
 }
 
-
 inline Quaternion FromTo(vec3 from, vec3 to)
 {
 	const float NormAB = sqrtf(length_squared(from) * length_squared(to));
-	
+
 	Quaternion r;
-	vec3 a =  cross(from, to);
+	vec3 a = cross(from, to);
 	r.x = a.x;
 	r.y = a.y;
 	r.z = a.z;
-	
-	r.w = dot(from,to)+NormAB;
+
+	r.w = dot(from, to) + NormAB;
 
 	return normalize(r);
 }
@@ -161,6 +160,22 @@ class Light
 public:
 	vec3 La, Le;
 	vec4 wLightPos; // With this, it can be at any point, even at infinite distance.....
+};
+
+class Material
+{
+public:
+	vec3 kd = vec3(1, 1, 1);
+	vec3 ks;
+	vec3 ka;
+
+	float shiny = 0;
+
+	Texture* text = nullptr;
+
+	Shader* shader = nullptr;
+
+	void Bind(RenderState& state);
 };
 
 
@@ -300,27 +315,6 @@ public:
 };
 
 
-class Material
-{
-public:
-	vec3 kd = vec3(1, 1, 1);
-	vec3 ks;
-	vec3 ka;
-
-	float shiny = 0;
-
-	Texture* text = nullptr;
-
-	Shader* shader = nullptr;
-
-	void Bind(RenderState& state)
-	{
-		state.material = this;
-		state.texture = text;
-		this->shader->Bind(state);
-	}
-};
-
 
 class CheckerBoardTexture : public Texture
 {
@@ -347,8 +341,8 @@ public:
 		const vec4 yellow(1, 1, 0, 1), blue(0, 0, 1, 1);
 		for (int x = 0; x < Twidth; x++)
 			for (int y = 0; y < Theight; y++) {
-			image[y * Twidth + x] = (y / Sheight) % 2 ==0  ? yellow : blue;
-		}
+				image[y * Twidth + x] = (y / Sheight) % 2 == 0 ? yellow : blue;
+			}
 		create(Twidth, Theight, image, GL_NEAREST);
 	}
 };
@@ -413,7 +407,7 @@ public:
 		return a;
 	}
 
-	
+
 	virtual void eval(Dnum2& U, Dnum2& V, Dnum2& X, Dnum2& Y, Dnum2& Z) = 0;
 
 	VertexData GetVertexData(float u, float v)
@@ -431,7 +425,7 @@ public:
 		vec3 drdU(X.d.x, Y.d.x, Z.d.x);
 		vec3 drdV(X.d.y, Y.d.y, Z.d.y);
 
-		res.normal =  cross(drdU, drdV);
+		res.normal = cross(drdU, drdV);
 
 		return res;
 	}
@@ -521,10 +515,12 @@ class AnimatedSurface : public ParamSurface
 {
 protected:
 	float t = 0;
+	float dt = 0;
 
 public:
 	void Tick(float deltaTime)
 	{
+		dt = deltaTime;
 		t += deltaTime;
 		create();
 	}
@@ -546,7 +542,7 @@ public:
 		V = V * (float)M_PI;
 
 		float slow_anim = anim / 10;
-		float magnitude = (1.0f / 20) *(abs(sinf(slow_anim)));
+		float magnitude = (1.0f / 20) * (abs(sinf(slow_anim)));
 		Dnum2 height = Sin(V * 15 + anim) * magnitude;
 		height = height + 1;
 		//X = (cos(U) * sin(V)) + (sin(V*5 + anim)/4);
@@ -560,12 +556,166 @@ public:
 	}
 };
 
+class TriangleRecurive : public Geometry
+{
+	unsigned int vertexCount;
+	float t = 0;
+
+	
+	struct VertexData
+	{
+		vec3 pos, normal;
+		vec2 textcoord;
+
+		VertexData(vec3 p, vec3 norm): pos(p), normal(norm)
+		{
+
+		}
+	};
+
+public:
+	TriangleRecurive()
+	{
+		create();
+	};
+
+	void Tick(float deltaTime) override
+	{
+		t += deltaTime;
+		create();
+	}
+	
+	std::vector<VertexData> maketeface(vec3 A, vec3 B, vec3 C, vec3 center, int iter)
+	{
+		std::vector<VertexData> res;
+
+		//calc the normal of the face:
+		vec3 norm_long = ((A + B + C) / 3) - center;
+		vec3 norm = normalize( norm_long );
+		
+		//        B
+		//       / \
+		//      /   \
+		// AB  /_____\  BC
+		//    / \    /\
+		//   /   \  /  \
+		//	/     \/    \
+		// A-------------C
+		//	      AC
+
+		vec3 AB = (A + B) / 2;
+		vec3 BC = (B + C) / 2;
+		vec3 AC = (A + C) / 2;
+
+		VertexData A_data(A, norm);
+		VertexData B_data(B, norm);
+		VertexData C_data(C, norm);
+		VertexData AB_data(AB, norm);
+		VertexData AC_data(AC, norm);
+		VertexData BC_data(BC, norm);
+		
+		//Triangles:
+		// A - AC - AB
+		res.push_back(A_data);
+		res.push_back(AC_data);
+		res.push_back(AB_data);
+		// AC - BC - C
+		res.push_back(AC_data);
+		res.push_back(BC_data);
+		res.push_back(C_data);
+		// AB - B -BC
+		res.push_back(AB_data);
+		res.push_back(B_data);
+		res.push_back(BC_data);
+
+		
+		//Call the function again
+		float x = t / 100;
+		float height = sinf(x) + abs(sinf(x)) + 2;
+		height *= length(norm_long);
+		
+		vec3 end = ((A+B+C)/3) + (norm * height);
+		
+		if (iter <= 1) {
+			iter++;
+			std::vector<VertexData> sub = maketeTetraeder(AB, AC, BC, end, iter);
+			res.insert(res.end(), sub.begin(), sub.end());
+		}
+		else
+		{
+			res.push_back(AB_data);
+			res.push_back(BC_data);
+			res.push_back(AC_data);
+		}
+
+		return res;
+	}
+
+	std::vector<VertexData> maketeTetraeder(vec3 A, vec3 B, vec3 C, vec3 D, int iter)
+	{
+		vec3 center = (A + B + C+D) / 4;
+		
+		std::vector<VertexData> model;
+		std::vector<VertexData> side;
+		if (iter == 0) {
+			side = maketeface(A, B, C,center, iter);
+			model.insert(model.end(), side.begin(), side.end());
+		}
+
+		side = maketeface(A, B, D, center, iter);
+		model.insert(model.end(), side.begin(), side.end());
+
+		side = maketeface(A, C, D, center, iter);
+		model.insert(model.end(), side.begin(), side.end());
+
+		side = maketeface(B, C, D, center, iter);
+		model.insert(model.end(), side.begin(), side.end());
+		
+		return model;
+	}
+	
+	void create(int level = 2)
+	{
+		std::vector<VertexData> vertexData = maketeTetraeder(vec3(1,-(1.73f/2),0), vec3(-1, -(1.73f / 2), 0), vec3(0, 1.73/2, 0),vec3(0,0,1.73),0);
+		vertexCount = vertexData.size();
+
+		glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);
+		glBindVertexArray(vertex_array);
+		glBufferData(GL_ARRAY_BUFFER, vertexData.size() * sizeof(VertexData), &vertexData[0], GL_STATIC_DRAW);
+		//Vertex atribute array enable
+		glEnableVertexAttribArray(0);
+		glEnableVertexAttribArray(1);
+		glEnableVertexAttribArray(2);
+
+		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(VertexData), (void*)offsetof(VertexData, pos));
+		glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(VertexData), (void*)offsetof(VertexData, normal));
+		glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, sizeof(VertexData), (void*)offsetof(VertexData, textcoord));
+
+	}
+
+	void Draw()
+	{
+		//printf("Draw the Geometry (Param)\n");
+
+		glBindVertexArray(vertex_array);
+		
+		
+		glDrawArrays(GL_TRIANGLES, 0, vertexCount);
+		
+	}
+
+public:
+	vec3 GetNormalAt(vec2 pos) override { return vec3(0, 0, 0); };
+	vec3 GetPosAt(vec2 pos) override { return vec3(0, 0, 0); }
+	;
+};
+
 #pragma endregion Geometry
 
 
 #pragma region Entities
 
-class Entity 
+class Entity
 {
 protected:
 	vec3 pos = vec3(0, 0, 0);
@@ -573,7 +723,25 @@ protected:
 	Quaternion rotation = vec4(0, 1, 0, 0);
 
 	Entity* parent = nullptr;
+
+	bool manualModelMatrix = false;
+	mat4 M;
+	mat4 Minv;
+
+	void recalcMatrixes()
+	{
+		if (manualModelMatrix == false) {
+			M = ScaleMatrix(scale) * RotationMatrix(rotation.w, vec4_3(rotation)) * TranslateMatrix(pos);
+			Minv = TranslateMatrix(-pos) * RotationMatrix(-rotation.w, vec4_3(rotation)) * ScaleMatrix(vec3(1 / scale.x, 1 / scale.y, 1 / scale.z));
+		}
+	}
+
 public:
+
+	Entity()
+	{
+		recalcMatrixes();
+	}
 
 	virtual void tick(float time) {};
 
@@ -584,6 +752,7 @@ public:
 	void setPos(vec3 p)
 	{
 		pos = p;
+		recalcMatrixes();
 	}
 
 	vec3 getPos()
@@ -594,32 +763,38 @@ public:
 	void setScale(vec3 s)
 	{
 		this->scale = s;
+		recalcMatrixes();
 	}
 
 	void setRot(Quaternion r)
 	{
 		rotation = r;
+		recalcMatrixes();
 	}
-	
+
 	void setParent(Entity* e)
 	{
 		parent = e;
 	}
-	
+
+	void setMatrix(mat4 M, mat4 Minv)
+	{
+		this->M = M; this->Minv = Minv;
+	}
 #pragma endregion
 
-	virtual void GetModelTransform(mat4& M, mat4& Minv)
+	virtual void GetModelTransform(mat4& M_out, mat4& Minv_out)
 	{
-		M = ScaleMatrix(scale) * RotationMatrix(rotation.w, vec4_3(rotation)) * TranslateMatrix(pos);
-		Minv = TranslateMatrix(-pos) * RotationMatrix(-rotation.w, vec4_3(rotation)) * ScaleMatrix(vec3(1 / scale.x, 1 / scale.y, 1 / scale.z));
+		M_out = M;
+		Minv_out = Minv;
 
-		if(parent != nullptr)
+		if (parent != nullptr)
 		{
 			mat4 Mparent;
 			mat4 MparentInv;
 			parent->GetModelTransform(Mparent, MparentInv);
-			M = M * Mparent;
-			Minv = Minv * MparentInv;
+			M_out = M_out * Mparent;
+			Minv_out = Minv_out * MparentInv;
 		}
 	}
 
@@ -680,7 +855,7 @@ protected:
 	Material* mat;
 public:
 
-	Renderer(Geometry* s, Material* m) : shape(s), mat(m)
+	Renderer(Geometry* s, Material* m) :Entity(), shape(s), mat(m)
 	{
 		this->rotation = vec4(0, 1, 0, 0);
 	}
@@ -715,20 +890,20 @@ class Virus : public Entity
 {
 	Material* material0;
 	Material* tentacle_mat;
-	
+
 	Renderer* body;
 
 	Geometry* tentacleMesh;
 	std::vector<Renderer*> tentecles;
-	
+
 public:
-	
-	Virus()
+
+	Virus() :Entity()
 	{
-		Texture* tex0 = new StripesTexture(1, 50,2);
+		Texture* tex0 = new StripesTexture(1, 50, 2);
 
 		Shader* phongShader = new PhongShader();
-		
+
 		material0 = new Material;
 		material0->kd = vec3(0.6f, 0.4f, 0.2f);
 		material0->ks = vec3(4, 4, 4);
@@ -744,54 +919,95 @@ public:
 		tentacle_mat->shiny = 100000;
 		tentacle_mat->shader = phongShader;
 		tentacle_mat->text = tex0;
-		
+
 		Geometry* sphere = new WavySphere();
 		body = new Renderer(sphere, material0);
 		body->setParent(this);
 
 		tentacleMesh = new Tractricoid();
-		
-		tentecles.push_back(createTentacle());
+
+		//tentecles.push_back(createTentacle());
+		createTentacle();
 	}
 
-	Renderer* createTentacle()
+	void createTentacle()
 	{
-		Renderer* ten = new Renderer(tentacleMesh, material0);
-		ten->setParent(this);
+		
 		//ten->setScale(vec3(0.2f, 0.2f, 0.2f));
-
-		setTentaclePos(ten);
+		float N = 6; //rows Pi
+		float M = 10; //	2* Pi
 		
-		return ten;
+		for (size_t i = 0; i <= N; i++)
+		{
+			float v = i / N;
+			float count = M * sin(v * M_PI);
+			for (size_t j = 0; j <= count; j++)
+			{
+				float u = j / floor(count);
+
+				Renderer* ten = new Renderer(tentacleMesh, material0);
+				ten->setParent(this);
+				
+				setTentaclePos(ten, u, v);
+
+				tentecles.push_back(ten);
+			}
+		}
+		
+		//setTentaclePos(ten);
+
+		//return ten;
 	}
 
-	void setTentaclePos(Renderer* ten)
+	void setTentaclePos(Renderer* ten, float u, float v)
 	{
-		vec3 pos = body->getMesh()->GetPosAt(vec2(M_PI_2, M_PI_2));
-		vec3 normal = body->getMesh()->GetNormalAt(vec2(M_PI_2, M_PI_2));
+		vec3 pos = body->getMesh()->GetPosAt(vec2(u, v));
+		vec3 normal = normalize( body->getMesh()->GetNormalAt(vec2(u, v)));
 		printf("Raw normal length: %f \n", length(normal));
 
-		
-		pos = pos + (normalize(normal) * 2.0f);
-		ten->setPos(pos);
+		float scale = 0.2f;
+
+		pos = pos;// +normal;// *(2 * scale);
+
+		vec3 base_axis = vec3(0, 0, -1);
+		vec3 axis = normalize( cross(base_axis, pos));
+		float angle = dot(base_axis, normal);
+		angle /= length(base_axis) * length(normal);
+		angle += M_PI_2;
+
+		//pos = pos;// +(normalize(normal));
+		//ten->setPos(pos);
 
 
-		Quaternion rot = FromTo(vec3(0, 0, 1), normal);
+		//Quaternion rot = FromTo(vec3(0, 0, -1), normal);
 		//rot = rot == vec4(0, 0, 0, 0) ? vec4(0, 1, 0, 0) : rot;
-		printf("Quat length: %f \n", length(rot));
-		ten->setRot(rot);
+		//printf("Quat length: %f \n", length(rot));
+		//ten->setRot(rot);
+
+		mat4 transform = ScaleMatrix(vec3(scale, scale, scale)) * TranslateMatrix(vec3(0, 0, -(2.0f * scale))) * RotationMatrix(angle, axis) * TranslateMatrix(pos);
+		mat4 transform_inv = TranslateMatrix(-pos) * RotationMatrix(-angle, axis) * TranslateMatrix(-vec3(0, 0, -(2.0f * scale))) * ScaleMatrix(vec3(1/scale, 1/scale, 1/scale));
+
+		//mat4 transform = ScaleMatrix(vec3(scale, scale, scale)) * TranslateMatrix(vec3(0, 0, -(2.0f * scale))) * RotationMatrix(rot.w, vec4_3(rot)) * TranslateMatrix(pos);
+		//mat4 transform_inv = TranslateMatrix(-pos) * RotationMatrix(-rot.w, vec4_3(rot)) * TranslateMatrix(-vec3(0, 0, -(2.0f * scale))) * ScaleMatrix(vec3(1 / scale, 1 / scale, 1 / scale));
+		
+		ten->setMatrix(transform, transform_inv);
 	}
-	
+
 	void tick(float dt)
 	{
 		dt /= 10;
 		float r = this->rotation.w;
 		r += dt * (2.0f / 180);
-		this->rotation = vec4(0, 1, 0, r);
-		
+		this->setRot(vec4(0, 1, 0, r));
+
 		body->tick(dt);
+
+		for (Renderer* r : tentecles)
+		{
+			//setTentaclePos(r,);
+		}
 	}
-	
+
 	void render(RenderState state) override
 	{
 		body->render(state);
@@ -809,9 +1025,9 @@ class Antibody : public Entity
 	Material* material0;
 
 	Renderer* body;
-	
+
 public:
-	
+
 	Antibody()
 	{
 		Texture* tex0 = new StripesTexture(1, 12, 2);
@@ -826,9 +1042,19 @@ public:
 		material0->shader = phongShader;
 		material0->text = tex0;
 
-		Geometry* sphere = new WavySphere();
+		Geometry* sphere = new TriangleRecurive();
 		body = new Renderer(sphere, material0);
 		body->setParent(this);
+	}
+
+	void tick(float dt)
+	{
+		dt /= 10;
+		float r = this->rotation.w;
+		r += dt * (2.0f / 180);
+		this->setRot(vec4(0, 1, 0, r));
+
+		body->tick(dt);
 	}
 	
 	void render(RenderState state) override
@@ -847,10 +1073,10 @@ class Engine
 	Camera* mainCamera = nullptr;
 
 	std::vector<Light> lights;
-	
+
 public:
 
-	
+
 	void Init()
 	{
 		glViewport(0, 0, windowWidth, windowHeight);
@@ -894,19 +1120,21 @@ public:
 
 	void tick(float time)
 	{
-		for (Entity * var : entities)
+		for (Entity* var : entities)
 		{
 			var->tick(time);
 		}
 	};
 };
 
-
 #pragma region Late Function declaration
 
-
-
-
+void Material::Bind(RenderState& state)
+{
+	state.material = this;
+	state.texture = text;
+	this->shader->Bind(state);
+}
 
 #pragma endregion
 
@@ -916,8 +1144,8 @@ Engine engine;
 void onInitialization() {
 
 	engine.Init();
-	
-	Entity* obj1 = new Virus();
+
+	Entity* obj1 = new Antibody();
 	obj1->setPos(vec3(0, 0, 0));
 	engine.addEntity(obj1);
 
@@ -976,7 +1204,6 @@ void onMouse(int button, int state, int pX, int pY) { // pX, pY are the pixel co
 	}
 	*/
 }
-
 
 // Idle event indicating that some time elapsed: do animation here
 void onIdle() {
