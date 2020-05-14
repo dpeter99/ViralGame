@@ -559,17 +559,37 @@ public:
 class TriangleRecurive : public Geometry
 {
 	unsigned int vertexCount;
-	float t = 0;
+	float time = 0;
 
-	
+	int iterMax = 2;
+
 	struct VertexData
 	{
 		vec3 pos, normal;
 		vec2 textcoord;
 
-		VertexData(vec3 p, vec3 norm): pos(p), normal(norm)
+		VertexData(vec3 p, vec3 norm) : pos(p), normal(norm)
 		{
 
+		}
+	};
+
+	struct Triangle
+	{
+		vec3 a;
+		vec3 b;
+		vec3 c;
+
+		vec3 norm;
+
+		Triangle() = default;
+
+		Triangle(const vec3& a, const vec3& b, const vec3& c, const vec3& n)
+			: a(a),
+			b(b),
+			c(c),
+			norm(n)
+		{
 		}
 	};
 
@@ -581,27 +601,20 @@ public:
 
 	void Tick(float deltaTime) override
 	{
-		t += deltaTime;
+		time += deltaTime;
 		create();
 	}
 	
+	/*
 	std::vector<VertexData> maketeface(vec3 A, vec3 B, vec3 C, vec3 center, int iter)
 	{
 		std::vector<VertexData> res;
 
 		//calc the normal of the face:
 		vec3 norm_long = ((A + B + C) / 3) - center;
-		vec3 norm = normalize( norm_long );
-		
-		//        B
-		//       / \
-		//      /   \
-		// AB  /_____\  BC
-		//    / \    /\
-		//   /   \  /  \
-		//	/     \/    \
-		// A-------------C
-		//	      AC
+		vec3 norm = normalize(norm_long);
+
+
 
 		vec3 AB = (A + B) / 2;
 		vec3 BC = (B + C) / 2;
@@ -613,30 +626,48 @@ public:
 		VertexData AB_data(AB, norm);
 		VertexData AC_data(AC, norm);
 		VertexData BC_data(BC, norm);
-		
-		//Triangles:
-		// A - AC - AB
-		res.push_back(A_data);
-		res.push_back(AC_data);
-		res.push_back(AB_data);
-		// AC - BC - C
-		res.push_back(AC_data);
-		res.push_back(BC_data);
-		res.push_back(C_data);
-		// AB - B -BC
-		res.push_back(AB_data);
-		res.push_back(B_data);
-		res.push_back(BC_data);
 
-		
-		//Call the function again
-		float x = t / 100;
+		//Make the center
+		float x = time / 100;
 		float height = sinf(x) + abs(sinf(x)) + 2;
 		height *= length(norm_long);
-		
-		vec3 end = ((A+B+C)/3) + (norm * height);
-		
-		if (iter <= 1) {
+
+		vec3 end = ((A + B + C) / 3) + (norm * height);
+
+		if (iter <= iterMax - 1) {
+
+			iter++;
+
+			std::vector<VertexData> sub = maketeTetraeder(A, AC, AB, end, iter);
+			res.insert(res.end(), sub.begin(), sub.end());
+
+			sub = maketeTetraeder(AC, BC, C, end, iter);
+			res.insert(res.end(), sub.begin(), sub.end());
+
+			sub = maketeTetraeder(AB, B, BC, end, iter);
+			res.insert(res.end(), sub.begin(), sub.end());
+
+		}
+		else
+		{
+			//Triangles:
+			// A - AC - AB
+			res.push_back(A_data);
+			res.push_back(AC_data);
+			res.push_back(AB_data);
+			// AC - BC - C
+			res.push_back(AC_data);
+			res.push_back(BC_data);
+			res.push_back(C_data);
+			// AB - B -BC
+			res.push_back(AB_data);
+			res.push_back(B_data);
+			res.push_back(BC_data);
+		}
+
+
+
+		if (iter <= iterMax) {
 			iter++;
 			std::vector<VertexData> sub = maketeTetraeder(AB, AC, BC, end, iter);
 			res.insert(res.end(), sub.begin(), sub.end());
@@ -653,12 +684,12 @@ public:
 
 	std::vector<VertexData> maketeTetraeder(vec3 A, vec3 B, vec3 C, vec3 D, int iter)
 	{
-		vec3 center = (A + B + C+D) / 4;
-		
+		vec3 center = (A + B + C + D) / 4;
+
 		std::vector<VertexData> model;
 		std::vector<VertexData> side;
 		if (iter == 0) {
-			side = maketeface(A, B, C,center, iter);
+			side = maketeface(A, B, C, center, iter);
 			model.insert(model.end(), side.begin(), side.end());
 		}
 
@@ -670,13 +701,116 @@ public:
 
 		side = maketeface(B, C, D, center, iter);
 		model.insert(model.end(), side.begin(), side.end());
-		
+
 		return model;
 	}
+	*/
 	
+	std::vector<VertexData> make()
+	{
+		vec3 A(1, -(1.73f / 2), 0);
+		vec3 B(-1, -(1.73f / 2), 0);
+		vec3 C(0, 1.73 / 2, 0);
+		vec3 D(0, 0, 1.73);
+
+		vec3 center = (A + B + C + D) / 4;
+
+
+
+		//add the base 3
+		std::vector <Triangle> triangles;
+
+		vec3 norm_ABC = normalize(((A + B + C) / 3) - center);
+		triangles.push_back(Triangle(A, B, C, norm_ABC));
+
+		vec3 norm_ABD = normalize(((A + B + D) / 3) - center);
+		triangles.push_back(Triangle(A, B, D, norm_ABD));
+
+		vec3 norm_ACD = normalize(((A + C + D) / 3) - center);
+		triangles.push_back(Triangle(A, C, D, norm_ACD));
+
+		vec3 norm_BCD = normalize(((B + C + D) / 3) - center);
+		triangles.push_back(Triangle(B, C, D, norm_BCD));
+
+
+		for (int i = 0; i < iterMax; i++)
+		{
+			std::vector <Triangle> new_list;
+			for (Triangle t : triangles)
+			{
+				//        B
+				//       / \
+				//      /   \
+				// AB  /_____\  BC
+				//    / \    /\
+				//   /   \  /  \
+				//	/     \/    \
+				// A-------------C
+				//	      AC
+
+				vec3 AB = (t.a + t.b) / 2;
+				vec3 BC = (t.b + t.c) / 2;
+				vec3 AC = (t.a + t.c) / 2;
+
+				//Triangles:
+				// A - AC - AB
+				new_list.push_back(Triangle(t.a, AC, AB, t.norm));
+				// AC - BC - C
+				new_list.push_back(Triangle(AC, BC, t.c, t.norm));
+				// AB - B -BC
+				new_list.push_back(Triangle(AB, t.b, BC, t.norm));
+
+
+				float x = time / 100;
+				//float height = sinf(x) + abs(sinf(x)) + 2;
+				//height *= length(t.norm);
+
+				float height = sqrtf(3) / 2 * length(AB - AC);
+				height *= (sinf(x) + abs(sinf(x)) / 2) + 1;
+
+				//printf("%f \n", length((normalize(t.norm) * height)));
+				
+				//new top
+				vec3 end = ((AB + AC + BC) / 3) + (normalize(t.norm) * height);
+
+
+				new_list.push_back(createSubFace(AB, BC, end, AC));
+				new_list.push_back(createSubFace(AB, AC, end, BC));
+				new_list.push_back(createSubFace(AC, BC, end, AB));
+			}
+			triangles = new_list;
+		}
+
+		std::vector <VertexData> verts;
+		for (Triangle t : triangles)
+		{
+			verts.push_back(VertexData(t.a, t.norm));
+			verts.push_back(VertexData(t.b, t.norm));
+			verts.push_back(VertexData(t.c, t.norm));
+		}
+		return verts;
+	}
+
+	Triangle createSubFace(vec3 A, vec3 B, vec3 C, vec3 D)
+	{
+		//Calculate the face normal
+		vec3 AB = A - B;
+		vec3 AC = A - C;
+		vec3 back_dir = D - A;
+
+		vec3 norm =  cross(AB, AC);
+		if (dot(norm, back_dir) > 0)
+		{
+			norm = norm * -1;
+		}
+
+		return Triangle(A, B, C, normalize(norm));
+	}
+
 	void create(int level = 2)
 	{
-		std::vector<VertexData> vertexData = maketeTetraeder(vec3(1,-(1.73f/2),0), vec3(-1, -(1.73f / 2), 0), vec3(0, 1.73/2, 0),vec3(0,0,1.73),0);
+		//std::vector<VertexData> vertexData = maketeTetraeder(vec3(1, -(1.73f / 2), 0), vec3(-1, -(1.73f / 2), 0), vec3(0, 1.73 / 2, 0), vec3(0, 0, 1.73), 0);
+		std::vector<VertexData> vertexData = make();
 		vertexCount = vertexData.size();
 
 		glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer);
@@ -698,10 +832,10 @@ public:
 		//printf("Draw the Geometry (Param)\n");
 
 		glBindVertexArray(vertex_array);
-		
-		
+
+
 		glDrawArrays(GL_TRIANGLES, 0, vertexCount);
-		
+
 	}
 
 public:
@@ -932,11 +1066,11 @@ public:
 
 	void createTentacle()
 	{
-		
+
 		//ten->setScale(vec3(0.2f, 0.2f, 0.2f));
 		float N = 6; //rows Pi
 		float M = 10; //	2* Pi
-		
+
 		for (size_t i = 0; i <= N; i++)
 		{
 			float v = i / N;
@@ -947,13 +1081,13 @@ public:
 
 				Renderer* ten = new Renderer(tentacleMesh, material0);
 				ten->setParent(this);
-				
+
 				setTentaclePos(ten, u, v);
 
 				tentecles.push_back(ten);
 			}
 		}
-		
+
 		//setTentaclePos(ten);
 
 		//return ten;
@@ -962,7 +1096,7 @@ public:
 	void setTentaclePos(Renderer* ten, float u, float v)
 	{
 		vec3 pos = body->getMesh()->GetPosAt(vec2(u, v));
-		vec3 normal = normalize( body->getMesh()->GetNormalAt(vec2(u, v)));
+		vec3 normal = normalize(body->getMesh()->GetNormalAt(vec2(u, v)));
 		printf("Raw normal length: %f \n", length(normal));
 
 		float scale = 0.2f;
@@ -970,7 +1104,7 @@ public:
 		pos = pos;// +normal;// *(2 * scale);
 
 		vec3 base_axis = vec3(0, 0, -1);
-		vec3 axis = normalize( cross(base_axis, pos));
+		vec3 axis = normalize(cross(base_axis, pos));
 		float angle = dot(base_axis, normal);
 		angle /= length(base_axis) * length(normal);
 		angle += M_PI_2;
@@ -985,11 +1119,11 @@ public:
 		//ten->setRot(rot);
 
 		mat4 transform = ScaleMatrix(vec3(scale, scale, scale)) * TranslateMatrix(vec3(0, 0, -(2.0f * scale))) * RotationMatrix(angle, axis) * TranslateMatrix(pos);
-		mat4 transform_inv = TranslateMatrix(-pos) * RotationMatrix(-angle, axis) * TranslateMatrix(-vec3(0, 0, -(2.0f * scale))) * ScaleMatrix(vec3(1/scale, 1/scale, 1/scale));
+		mat4 transform_inv = TranslateMatrix(-pos) * RotationMatrix(-angle, axis) * TranslateMatrix(-vec3(0, 0, -(2.0f * scale))) * ScaleMatrix(vec3(1 / scale, 1 / scale, 1 / scale));
 
 		//mat4 transform = ScaleMatrix(vec3(scale, scale, scale)) * TranslateMatrix(vec3(0, 0, -(2.0f * scale))) * RotationMatrix(rot.w, vec4_3(rot)) * TranslateMatrix(pos);
 		//mat4 transform_inv = TranslateMatrix(-pos) * RotationMatrix(-rot.w, vec4_3(rot)) * TranslateMatrix(-vec3(0, 0, -(2.0f * scale))) * ScaleMatrix(vec3(1 / scale, 1 / scale, 1 / scale));
-		
+
 		ten->setMatrix(transform, transform_inv);
 	}
 
@@ -1056,7 +1190,7 @@ public:
 
 		body->tick(dt);
 	}
-	
+
 	void render(RenderState state) override
 	{
 		body->render(state);
