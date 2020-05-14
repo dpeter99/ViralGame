@@ -347,6 +347,23 @@ public:
 	}
 };
 
+class GradientTexture : public Texture
+{
+public:
+	GradientTexture(const int Twidth = 0, const int Theight = 0, const vec3 color1, vec3 color2) : Texture() {
+		//printf("Created Checker Board Texture\n");
+
+		std::vector<vec4> image(Twidth * Theight);
+		const vec4 yellow(1, 1, 0, 1), blue(0, 0, 1, 1);
+		for (int x = 0; x < Twidth; x++)
+			for (int y = 0; y < Theight; y++) {
+				image[y * Twidth + x] = (y / Sheight) % 2 == 0 ? yellow : blue;
+			}
+		create(Twidth, Theight, image, GL_NEAREST);
+	}
+};
+
+
 #pragma region Geometry
 
 class Geometry
@@ -766,7 +783,7 @@ public:
 				//height *= length(t.norm);
 
 				float height = sqrtf(3) / 2 * length(AB - AC);
-				height *= (sinf(x) + abs(sinf(x)) / 2) + 1;
+				height *= (sinf(x) + abs(sinf(x)) / 4) + 0.5f;
 
 				//printf("%f \n", length((normalize(t.norm) * height)));
 				
@@ -846,6 +863,15 @@ public:
 
 #pragma endregion Geometry
 
+class InputSate {
+public:
+	int X = 0;
+	int Y = 0;
+	int Z = 0;
+
+	vec3 getDir() { return vec3(X, Y, Z); }
+};
+InputSate inputs;
 
 #pragma region Entities
 
@@ -1160,6 +1186,9 @@ class Antibody : public Entity
 
 	Renderer* body;
 
+
+	float speed = 0.01f;
+
 public:
 
 	Antibody()
@@ -1183,6 +1212,9 @@ public:
 
 	void tick(float dt)
 	{
+		vec3 newPos = this->getPos() + normalize_fix(inputs.getDir()) * speed * dt;
+		this->setPos(newPos);
+
 		dt /= 10;
 		float r = this->rotation.w;
 		r += dt * (2.0f / 180);
@@ -1195,10 +1227,10 @@ public:
 	{
 		body->render(state);
 	}
-
 };
 
 #pragma endregion Entities
+
 
 
 class Engine
@@ -1207,9 +1239,7 @@ class Engine
 	Camera* mainCamera = nullptr;
 
 	std::vector<Light> lights;
-
 public:
-
 
 	void Init()
 	{
@@ -1279,9 +1309,28 @@ void onInitialization() {
 
 	engine.Init();
 
+	Shader* phongShader = new PhongShader();
+
+	Geometry* b = new Sphere();
+	Material* b_mat = new Material();
+	b_mat->kd = vec3(0.6f, 0.4f, 0.2f);
+	b_mat->ks = vec3(4, 4, 4);
+	b_mat->ka = vec3(0.5f, 0.5f, 0.5f);
+	b_mat->shiny = 100000;
+	b_mat->shader = phongShader;
+	b_mat->text = tex0;
+
+	Renderer* background = new Renderer(b,b_mat);
+	background->setPos(vec3(0, 0, 0));
+	engine.addEntity(background);
+
 	Entity* obj1 = new Antibody();
 	obj1->setPos(vec3(0, 0, 0));
 	engine.addEntity(obj1);
+
+	Entity* vir = new Virus();
+	vir->setPos(vec3(0, 0, 0));
+	engine.addEntity(vir);
 
 
 	Light light0;
@@ -1291,7 +1340,7 @@ void onInitialization() {
 	engine.addLight(light0);
 
 	Camera* cam = new Camera();
-	cam->setPos(vec3(0.1f, 0.1f, 5));
+	cam->setPos(vec3(0, 0, 10));
 	engine.setCamera(cam);
 
 }
@@ -1304,10 +1353,28 @@ void onDisplay() {
 // Key of ASCII code pressed
 void onKeyboard(unsigned char key, int pX, int pY) {
 	if (key == 'd') glutPostRedisplay();         // if d, invalidate display, i.e. redraw
+
+	if (key == 'X') inputs.X = 1;
+	else if (key == 'x') inputs.X = -1;
+	else inputs.X = 0;
+
+	if (key == 'Y') inputs.Y = 1;
+	else if (key == 'y') inputs.Y = -1;
+	else inputs.Y = 0;
+
+	if (key == 'Z') inputs.Z = 1;
+	else if (key == 'z') inputs.Z = -1;
+	else inputs.Z = 0;
 }
 
 // Key of ASCII code released
 void onKeyboardUp(unsigned char key, int pX, int pY) {
+
+	if (key == 'X' || key == 'x') inputs.X = 0;
+
+	if (key == 'Y' || key == 'y') inputs.Y = 0;
+
+	if (key == 'Z' || key == 'z') inputs.Z = 0;
 }
 
 // Move mouse with key pressed
